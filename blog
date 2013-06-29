@@ -1,0 +1,200 @@
+#!/usr/bin/env perl
+use Mojolicious::Lite;
+use Data::Dumper;
+
+plugin 'config';
+my $config = app->config;
+
+plugin 'DbixConnector' => {
+    dsn      => $config->{'database'}->{'dsn'},
+    username => $config->{'database'}->{'username'},
+    password => $config->{'database'}->{'password'},
+};
+
+helper dbh => sub { shift->app->conn->dbh };
+
+helper select => sub {
+    my $self = shift;
+    $self->dbh->selectall_arrayref("SELECT * FROM blog_emberjs ORDER BY id", { Slice => {} });
+};
+
+helper update => sub {
+    my $self = shift;
+    my $args = shift || return undef;
+    my $table = delete $args->{'table'} || 'blog_emberjs';
+    my $id = delete $args->{'id'} || return undef;
+    my ($fields, $values) = $self->hash2mysql($args, $table);
+    my $update_string = join(",\n", map { "$_ = ?" } @$fields);
+    my $sql = qq{
+        UPDATE $table
+           SET $update_string
+         WHERE id = ?
+    };
+    $self->dbh->do($sql, {}, @$values, $id);
+    return 1;
+};
+
+helper fields => sub {
+    my $self = shift;
+    my $table = shift || 'mojotask';
+    my $key = "fields:$table";
+    return $self->session->{$key} ||= do {
+        my $fields;
+        my $sth = $self->dbh->prepare("DESC $table");
+        $sth->execute();
+        while (my $rec = $sth->fetchrow_hashref) {
+            push @$fields, $rec->{'Field'};
+        }
+        $fields;
+    }
+};
+
+helper hash2mysql => sub {
+    my $self = shift;
+    my $hash = shift || {};
+    my $table = shift || 'mojotask';
+    my (@fields, @values);
+    my $table_fields = $self->fields($table);
+    foreach my $field (sort @$table_fields) {
+        if (exists $hash->{ $field }) {
+            push @fields, "$table.$field";
+            push @values, $hash->{ $field };
+        }
+    }
+    return (\@fields, \@values);
+};
+
+get '/' => sub {
+    shift->render('index');
+}; 
+
+get '/posts' => sub {
+    my $self = shift;
+    my $posts = $self->select;
+    $self->render( json => {
+         posts => $posts,
+    });
+};
+
+get '/posts/:id' => sub {
+    my $self = shift;
+    my $id = $self->param('id');
+    $self->render(json => { success => 1});
+};
+
+put '/posts/:id' => sub {
+    my $self = shift;
+    my $post = Mojo::JSON->decode( $self->req->body );
+    $self->update({
+        id => $self->param('id'),
+        title => $post->{'post'}->{'title'},
+        intro => $post->{'post'}->{'intro'},
+        extended => $post->{'post'}->{'extended'},
+    });
+    $self->render(json => { success => 1 });
+};
+
+app->start;
+
+__DATA__
+
+@@ index.html.ep
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8 />
+<title>Ember Starter Kit</title>
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/bootstrap.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <script type="text/x-handlebars">
+    <div class="navbar">
+      <div class="navbar-inner">
+        <a class="brand" href="#">Bloggr</a>
+        <ul class="nav">
+          <li>{{#linkTo 'posts'}}Posts{{/linkTo}}</li>
+          <li>{{#linkTo 'about'}}About{{/linkTo}}</li>
+        </ul>
+      </div>
+    </div>
+
+    {{outlet}}
+  </script>
+
+  <script type="text/x-handlebars" id="posts">
+    <div class="container-fluid">
+      <div class="row-fluid">
+        <div class="span3">
+          <table class='table'>
+            <thead>
+              <tr><th>Recent Posts</th></tr>
+            </thead>
+            {{#each model}}
+            <tr><td>
+              {{#linkTo 'post' this}}{{title}} <small class='muted'>by {{author}}</small>{{/linkTo}}
+            </td></tr>
+            {{/each}}
+          </table>
+        </div>
+        <div class="span9">
+          {{outlet}}
+        </div>
+      </div>
+    </div>
+  </script>
+
+  <script type="text/x-handlebars" id="posts/index">
+    <p class="text-warning">Please select a post</p>
+  </script>
+
+  <script type="text/x-handlebars" id="post">
+    {{#if isEditing}}
+      {{partial 'post/edit'}}
+      <button {{action 'doneEditing'}}>Done</button>
+    {{else}}
+      <button {{action 'edit'}}>Edit</button>
+    {{/if}}
+
+    <h1>{{title}}</h1>
+    <h2>by {{author}} <small class='muted'>({{date created}})</small></h2>
+
+    <hr>
+
+    <div class='intro'>
+      {{markdown intro}}
+    </div>
+
+    <div class='below-the-fold'>
+      {{markdown extended}}
+    </div>
+  </script>
+
+  <script type="text/x-handlebars" id="post/_edit">
+    <p>{{view Ember.TextField valueBinding='title'}}</p>
+    <p>{{view Ember.TextArea valueBinding='intro'}}</p>
+    <p>{{view Ember.TextArea valueBinding='extended'}}</p>
+  </script>
+
+  <script type="text/x-handlebars" id="about">
+    <div class='about'>
+      <p>My name is Matt Monsen and I have just started out on creating my own open source applications to share with others and to help teach people to do something that I love.  I have been programming since I was a kid and have been working for a hosting company since 2006.  I love learning new things and this is my example of using EmberJS and Mojolicious together to create a clean MVC blog application.</p>
+    </div>
+
+    <div class='about'>
+      <p>I enjoy baseball, bowling, spending time with my wife and kids, and learning new technologies.</p>
+    </div>
+  </script>
+
+  <script src="js/libs/jquery-1.9.1.js"></script>
+  <script src="js/libs/handlebars-1.0.0-rc.3.js"></script>
+  <script src="js/libs/ember-1.0.0-master.js"></script>
+  <script src="js/libs/ember-data-master.js"></script>
+  <script src="js/libs/showdown.js"></script>
+  <script src="js/libs/moment.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

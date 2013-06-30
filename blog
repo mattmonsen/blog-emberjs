@@ -10,6 +10,28 @@ plugin 'DbixConnector' => {
     username => $config->{'database'}->{'username'},
     password => $config->{'database'}->{'password'},
 };
+plugin 'authentication' => {
+    session_key => 'blog_emberjs_session_key',
+    stash_key   => 'auth',
+    load_user   => sub {
+        my $self = shift;
+        my $uid = shift;
+        return {
+            id => 1,
+            username => 'mdmonsen',
+            name => 'Matt Monsen',
+        };
+    },
+    validate_user => sub {
+        my $self = shift;
+        my $user = shift;
+        my $pass = shift;
+        return $user eq $config->{'username'} 
+            && $pass eq $config->{'password'}
+                ? 1
+                : undef;
+    },
+};
 
 helper dbh => sub { shift->app->conn->dbh };
 
@@ -68,6 +90,25 @@ get '/' => sub {
     shift->render('index');
 }; 
 
+post '/login' => sub {
+    my $self = shift;
+    my $user = $self->param('user');
+    my $pass = $self->param('pass');
+
+    if ($self->authenticate($user, $pass)) {
+        $self->session( user => $user );
+    } else {
+        $self->flash( message => 'Invalid Credentials' );
+    }
+    return $self->redirect_to('/');
+};
+
+any [qw(GET POST)] => '/logout' => sub {
+    my $self = shift;
+    $self->session( expires => 1);
+    $self->redirect_to('/') and return;
+};
+
 get '/posts' => sub {
     my $self = shift;
     my $posts = $self->select;
@@ -113,15 +154,28 @@ __DATA__
   <script type="text/x-handlebars">
     <div class="navbar">
       <div class="navbar-inner">
-        <a class="brand" href="#">Bloggr</a>
+        <a class="brand" href="#">Blog</a>
         <ul class="nav">
           <li>{{#linkTo 'posts'}}Posts{{/linkTo}}</li>
           <li>{{#linkTo 'about'}}About{{/linkTo}}</li>
+          <% if (session 'user') { %>
+          <li><a href="/logout">Logout</a></li>
+          <% } %>
         </ul>
       </div>
     </div>
-
     {{outlet}}
+    <% unless (session 'user') { %>
+    <form method="post" action="/login">
+      <p><label>Username:<br />
+      <input type="text" name="user" /></label></p>
+      <p><label>Password:<br />
+      <input type="password" name="pass" /></label></p>
+      <p><input type="submit" name="signin" value="Sign In" /></p>
+      <span style="color: red;"><%= flash 'message' %></span>
+    </form>
+    <% } %>
+
   </script>
 
   <script type="text/x-handlebars" id="posts">
@@ -151,12 +205,14 @@ __DATA__
   </script>
 
   <script type="text/x-handlebars" id="post">
+    <% if (session 'user') { %>
     {{#if isEditing}}
       {{partial 'post/edit'}}
       <button {{action 'doneEditing'}}>Done</button>
     {{else}}
       <button {{action 'edit'}}>Edit</button>
     {{/if}}
+    <% } %>
 
     <h1>{{title}}</h1>
     <h2>by {{author}} <small class='muted'>({{date created}})</small></h2>

@@ -4,4 +4,6 @@
         username => 'username',
         password => 'password',
     },
+    username => 'foo',
+    password => 'bar',
 }

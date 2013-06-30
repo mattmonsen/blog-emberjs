@@ -1,1 +1,4 @@
-blog.conf
+*.conf
+*.pid
+*.swp
+log

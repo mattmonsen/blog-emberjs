@@ -36,7 +36,7 @@ helper update => sub {
 
 helper fields => sub {
     my $self = shift;
-    my $table = shift || 'mojotask';
+    my $table = shift || 'blog_emberjs';
     my $key = "fields:$table";
     return $self->session->{$key} ||= do {
         my $fields;
@@ -52,7 +52,7 @@ helper fields => sub {
 helper hash2mysql => sub {
     my $self = shift;
     my $hash = shift || {};
-    my $table = shift || 'mojotask';
+    my $table = shift || 'blog_emberjs';
     my (@fields, @values);
     my $table_fields = $self->fields($table);
     foreach my $field (sort @$table_fields) {
@@ -103,7 +103,7 @@ __DATA__
 <html>
 <head>
 <meta charset=utf-8 />
-<title>Ember Starter Kit</title>
+<title>Blog - Using EmberJS and Mojolicious</title>
   <link rel="stylesheet" href="css/normalize.css">
   <link rel="stylesheet" href="css/bootstrap.css">
   <link rel="stylesheet" href="css/style.css">

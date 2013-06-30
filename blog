@@ -100,7 +100,7 @@ post '/login' => sub {
     } else {
         $self->flash( message => 'Invalid Credentials' );
     }
-    return $self->redirect_to('/');
+    return $self->redirect_to('/#/posts');
 };
 
 any [qw(GET POST)] => '/logout' => sub {
@@ -162,20 +162,16 @@ __DATA__
           <li><a href="/logout">Logout</a></li>
           <% } %>
         </ul>
+        <% unless (session 'user') { %>
+        <form class="navbar-form pull-right" action="/login" method="POST">
+          <input type="text" name="user" placeholder="Username" />
+          <input type="password" name="pass" placeholder="Password" />
+          <button type="submit" class="btn">Login</button>
+        </form>
+        <% } %>
       </div>
     </div>
     {{outlet}}
-    <% unless (session 'user') { %>
-    <form method="post" action="/login">
-      <p><label>Username:<br />
-      <input type="text" name="user" /></label></p>
-      <p><label>Password:<br />
-      <input type="password" name="pass" /></label></p>
-      <p><input type="submit" name="signin" value="Sign In" /></p>
-      <span style="color: red;"><%= flash 'message' %></span>
-    </form>
-    <% } %>
-
   </script>
 
   <script type="text/x-handlebars" id="posts">
